@@ -6,6 +6,7 @@
   <title>VINSpec Pro — Mechanic's VIN & Service Bay Assistant</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
@@ -112,6 +113,7 @@
           </div>
           <button id="btnStopCamera" type="button" class="hidden w-full rounded-lg border border-slate-700 bg-slate-800/70 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800">Close Camera</button>
           <p id="ocrRawOutput" class="hidden rounded-lg bg-slate-950 px-3 py-2 text-[11px] text-slate-400"></p>
+          <div id="ocrCandidateChips" class="hidden flex flex-wrap gap-1.5"></div>
         </div>
 
         <!-- Right: Manual VIN Entry, Quick Bay Vehicles & History -->
@@ -820,57 +822,257 @@
       reader.readAsDataURL(file);
     }
 
-    function preprocessCanvasForOcr(canvas) {
-      const ctx = canvas.getContext("2d");
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // ISO 3779 VIN check-digit validator (position 9)
+    function isValidVinCheckDigit(vin) {
+      if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) return false;
+      const map = {
+        A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,J:1,K:2,L:3,M:4,N:5,P:7,R:9,
+        S:2,T:3,U:4,V:5,W:6,X:7,Y:8,Z:9,
+        0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9
+      };
+      const weights = [8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
+      let sum = 0;
+      for (let i = 0; i < 17; i++) {
+        const val = map[vin[i]];
+        if (val === undefined) return false;
+        sum += val * weights[i];
+      }
+      const rem = sum % 11;
+      const expected = rem === 10 ? "X" : String(rem);
+      return vin[8] === expected;
+    }
+
+    function normalizeVinToken(raw) {
+      return raw.toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .replace(/O/g, "0")
+        .replace(/Q/g, "0")
+        .replace(/I/g, "1");
+    }
+
+    function extractVinCandidates(rawText) {
+      const candidates = new Map();
+      const lines = rawText.split(/\r?\n/);
+      lines.forEach((line) => {
+        const upperLine = line.toUpperCase();
+        const hasVinLabel = /\bVIN\b|V\.I\.N|NO\.?\s*[:]/.test(upperLine);
+        // Check individual tokens and adjacent pairs on the same line
+        const tokens = upperLine.split(/[^A-Z0-9-]+/).filter(Boolean);
+        const searchPool = [...tokens, upperLine.replace(/[^A-Z0-9]/g, "")];
+        searchPool.forEach((chunk) => {
+          const norm = normalizeVinToken(chunk);
+          // Strip leading Code39 'I'/'1' prefix if 18 chars
+          const expanded = norm.length === 18 && norm.startsWith("1") ? [norm.slice(1), norm] : [norm];
+          expanded.forEach((str) => {
+            for (let i = 0; i <= str.length - 17; i++) {
+              const sub = str.slice(i, i + 17);
+              if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(sub)) continue;
+              // Skip obvious non-VINs (all digits or no digits)
+              if (/^\d{17}$/.test(sub) || /^[A-Z]{17}$/.test(sub)) continue;
+              let score = 0;
+              if (isValidVinCheckDigit(sub)) score += 100;
+              if (hasVinLabel) score += 25;
+              if (/^[1-5JKSWYZ]/.test(sub)) score += 15;
+              if (sub.length === str.length) score += 10;
+              const prev = candidates.get(sub) || -1;
+              if (score > prev) candidates.set(sub, score);
+            }
+          });
+        });
+      });
+      return [...candidates.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([vin, score]) => ({ vin, score, validCheck: isValidVinCheckDigit(vin) }));
+    }
+
+    function rotateCanvas(srcCanvas, degrees) {
+      const out = document.createElement("canvas");
+      const rad = (degrees * Math.PI) / 180;
+      if (degrees === 90 || degrees === 270) {
+        out.width = srcCanvas.height;
+        out.height = srcCanvas.width;
+      } else {
+        out.width = srcCanvas.width;
+        out.height = srcCanvas.height;
+      }
+      const ctx = out.getContext("2d");
+      ctx.translate(out.width / 2, out.height / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(srcCanvas, -srcCanvas.width / 2, -srcCanvas.height / 2);
+      return out;
+    }
+
+    function makeContrastCanvas(srcCanvas, cropCenter = false) {
+      const out = document.createElement("canvas");
+      const sx = cropCenter ? Math.round(srcCanvas.width * 0.05) : 0;
+      const sy = cropCenter ? Math.round(srcCanvas.height * 0.22) : 0;
+      const sw = cropCenter ? Math.round(srcCanvas.width * 0.90) : srcCanvas.width;
+      const sh = cropCenter ? Math.round(srcCanvas.height * 0.56) : srcCanvas.height;
+      const scale = cropCenter && sw < 1000 ? 1.8 : 1;
+      out.width = Math.round(sw * scale);
+      out.height = Math.round(sh * scale);
+      const ctx = out.getContext("2d");
+      ctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+      const imgData = ctx.getImageData(0, 0, out.width, out.height);
       const d = imgData.data;
       for (let i = 0; i < d.length; i += 4) {
         const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        // Simple high-contrast stretch
-        const boosted = gray < 120 ? Math.max(0, gray * 0.7) : Math.min(255, gray * 1.25);
+        const boosted = gray < 125 ? Math.max(0, gray * 0.65) : Math.min(255, gray * 1.3);
         d[i] = d[i + 1] = d[i + 2] = boosted;
       }
       ctx.putImageData(imgData, 0, 0);
-      return canvas;
+      return out;
+    }
+
+    async function tryBarcodeDecode(srcCanvas) {
+      const canvasesToTry = [srcCanvas, rotateCanvas(srcCanvas, 90)];
+      // 1. Native BarcodeDetector (fast on Android/Chrome)
+      if ("BarcodeDetector" in window) {
+        try {
+          const detector = new window.BarcodeDetector({ formats: ["code_39", "code_128", "data_matrix", "pdf417", "qr_code"] });
+          for (const c of canvasesToTry) {
+            const barcodes = await detector.detect(c);
+            for (const b of barcodes) {
+              const found = extractVinCandidates(b.rawValue || "");
+              if (found.length) return found[0].vin;
+            }
+          }
+        } catch (e) { /* fallback to ZXing */ }
+      }
+      // 2. ZXing 1D/2D Barcode Reader
+      if (typeof ZXing !== "undefined" && ZXing.BrowserMultiFormatReader) {
+        try {
+          const reader = new ZXing.BrowserMultiFormatReader();
+          for (const c of canvasesToTry) {
+            const img = new Image();
+            img.src = c.toDataURL("image/png");
+            await new Promise((res) => { img.onload = res; img.onerror = res; });
+            try {
+              const result = await reader.decodeFromImageElement(img);
+              if (result && result.text) {
+                const found = extractVinCandidates(result.text);
+                if (found.length) return found[0].vin;
+              }
+            } catch (e) { /* no barcode in this orientation */ }
+          }
+        } catch (e) { /* ignore */ }
+      }
+      return null;
+    }
+
+    function renderCandidateChips(candidates) {
+      const chipsEl = document.getElementById("ocrCandidateChips");
+      if (!candidates || candidates.length <= 1) {
+        chipsEl.classList.add("hidden");
+        chipsEl.innerHTML = "";
+        return;
+      }
+      chipsEl.classList.remove("hidden");
+      chipsEl.innerHTML = '<span class="w-full text-[10px] font-semibold uppercase tracking-wider text-slate-400">Other OCR Candidates (tap to use):</span>';
+      candidates.slice(0, 4).forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "font-mono-vin rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:border-amber-500";
+        btn.textContent = c.vin;
+        btn.addEventListener("click", () => {
+          document.getElementById("vinInput").value = c.vin;
+          document.getElementById("vinCharCount").textContent = "17 / 17";
+          decodeVin(c.vin);
+        });
+        chipsEl.appendChild(btn);
+      });
     }
 
     async function runVinOcr(canvas) {
+      const rawEl = document.getElementById("ocrRawOutput");
+      const chipsEl = document.getElementById("ocrCandidateChips");
+      chipsEl.classList.add("hidden");
+      rawEl.classList.remove("hidden");
+
+      // Stage 1: Try 1D/2D Barcode first (door-jamb stickers!)
+      updateOcrBadge("Checking Barcode...", "bg-amber-500/20 text-amber-300");
+      rawEl.textContent = "Scanning door-jamb barcode...";
+      const barcodeVin = await tryBarcodeDecode(canvas);
+      if (barcodeVin) {
+        document.getElementById("vinInput").value = barcodeVin;
+        document.getElementById("vinCharCount").textContent = "17 / 17";
+        rawEl.textContent = `Barcode VIN: ${barcodeVin}`;
+        updateOcrBadge("Barcode Matched", "bg-emerald-500/20 text-emerald-300");
+        showToast(`Barcode scanned VIN: ${barcodeVin}`, "success");
+        decodeVin(barcodeVin);
+        return;
+      }
+
+      // Stage 2: Multi-pass Tesseract OCR
       if (typeof Tesseract === "undefined") {
+        updateOcrBadge("OCR Unavailable", "bg-rose-500/20 text-rose-300");
+        rawEl.textContent = "OCR library offline — enter VIN manually.";
         showToast("OCR library still loading or offline — enter VIN manually.", "warn");
         return;
       }
-      updateOcrBadge("Scanning VIN...", "bg-amber-500/20 text-amber-300");
-      const rawEl = document.getElementById("ocrRawOutput");
-      rawEl.classList.remove("hidden");
-      rawEl.textContent = "Reading text from VIN photo...";
 
+      updateOcrBadge("Scanning Text...", "bg-amber-500/20 text-amber-300");
+      rawEl.textContent = "Running multi-pass VIN OCR...";
+
+      let worker = null;
       try {
-        preprocessCanvasForOcr(canvas);
-        const worker = await Tesseract.createWorker("eng");
+        worker = await Tesseract.createWorker("eng");
         await worker.setParameters({
-          tessedit_char_whitelist: "0123456789ABCDEFGHJKLMNPRSTUVWXYZ"
+          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- ",
+          tessedit_pageseg_mode: "11"
         });
-        const { data: { text } } = await worker.recognize(canvas);
-        await worker.terminate();
 
-        const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
-        const match = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/);
-        if (match) {
-          const foundVin = match[0];
-          document.getElementById("vinInput").value = foundVin;
+        const passes = [
+          { label: "Full sticker", c: makeContrastCanvas(canvas, false) },
+          { label: "Center crop", c: makeContrastCanvas(canvas, true) },
+          { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), false) },
+          { label: "Rotated 270°", c: makeContrastCanvas(rotateCanvas(canvas, 270), false) }
+        ];
+
+        let allCandidates = [];
+        let lastRaw = "";
+
+        for (const pass of passes) {
+          rawEl.textContent = `OCR pass: ${pass.label}...`;
+          const { data: { text } } = await worker.recognize(pass.c);
+          lastRaw = text;
+          const found = extractVinCandidates(text);
+          if (found.length) {
+            allCandidates = allCandidates.concat(found);
+            // Stop early if we found a check-digit-verified VIN!
+            if (found[0].validCheck) break;
+          }
+        }
+
+        // Deduplicate & sort best candidates
+        const bestMap = new Map();
+        allCandidates.forEach((c) => {
+          if (!bestMap.has(c.vin) || c.score > bestMap.get(c.vin).score) {
+            bestMap.set(c.vin, c);
+          }
+        });
+        const ranked = [...bestMap.values()].sort((a, b) => b.score - a.score);
+
+        if (ranked.length) {
+          const top = ranked[0];
+          document.getElementById("vinInput").value = top.vin;
           document.getElementById("vinCharCount").textContent = "17 / 17";
-          rawEl.textContent = `Detected VIN: ${foundVin}`;
-          updateOcrBadge("VIN Found", "bg-emerald-500/20 text-emerald-300");
-          showToast(`OCR detected VIN: ${foundVin}`, "success");
-          decodeVin(foundVin);
+          rawEl.textContent = `Detected VIN: ${top.vin}${top.validCheck ? " (check-digit verified)" : ""}`;
+          renderCandidateChips(ranked);
+          updateOcrBadge(top.validCheck ? "VIN Verified" : "VIN Found", "bg-emerald-500/20 text-emerald-300");
+          showToast(`OCR detected VIN: ${top.vin}`, "success");
+          decodeVin(top.vin);
         } else {
-          rawEl.textContent = `OCR saw: "${cleaned.slice(0, 42) || 'no clear text'}" — try closer framing or enter manually.`;
+          const previewText = lastRaw.replace(/\s+/g, " ").trim().slice(0, 60);
+          rawEl.textContent = `OCR saw: "${previewText || 'no clear text'}" — try closer framing on just the VIN line/barcode.`;
           updateOcrBadge("No 17-char VIN", "bg-rose-500/20 text-rose-300");
-          showToast("Couldn't isolate a 17-digit VIN. Try a closer, glare-free photo.", "warn");
+          showToast("Couldn't isolate a 17-digit VIN. Try zooming closer to the VIN & barcode.", "warn");
         }
       } catch (err) {
         rawEl.textContent = "OCR failed in browser — enter VIN manually.";
         updateOcrBadge("OCR Error", "bg-rose-500/20 text-rose-300");
+      } finally {
+        if (worker) await worker.terminate();
       }
     }
 
