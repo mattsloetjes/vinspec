@@ -89,8 +89,8 @@
 
             <!-- VIN Alignment Guide Overlay (shown when camera active) -->
             <div id="vinReticle" class="pointer-events-none absolute inset-0 hidden items-center justify-center">
-              <div class="flex h-[50%] w-[88%] flex-col items-center justify-center rounded-xl border-2 border-dashed border-amber-400 bg-amber-400/5 text-center shadow-[0_0_0_9999px_rgba(2,6,23,0.55)]">
-                <span class="rounded bg-slate-950/85 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-300">Align VIN / Barcode Inside Box</span>
+              <div class="flex h-[32%] w-[92%] flex-col items-center justify-center rounded-xl border-2 border-dashed border-amber-400 bg-amber-400/5 text-center shadow-[0_0_0_9999px_rgba(2,6,23,0.60)]">
+                <span class="rounded bg-slate-950/85 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-300">Aim at JUST the VIN Line or Barcode</span>
               </div>
             </div>
           </div>
@@ -749,11 +749,11 @@
       const visH = vh / scale;
       const visX = (sw - visW) / 2;
       const visY = (sh - visH) / 2;
-      // Match reticle box: 88% width, 50% height centered
-      const rx = Math.max(0, Math.round(visX + visW * 0.06));
-      const ry = Math.max(0, Math.round(visY + visH * 0.25));
-      const rw = Math.min(sw - rx, Math.round(visW * 0.88));
-      const rh = Math.min(sh - ry, Math.round(visH * 0.50));
+      // Match reticle box: 92% width, 32% height centered
+      const rx = Math.max(0, Math.round(visX + visW * 0.04));
+      const ry = Math.max(0, Math.round(visY + visH * 0.34));
+      const rw = Math.min(sw - rx, Math.round(visW * 0.92));
+      const rh = Math.min(sh - ry, Math.round(visH * 0.32));
 
       const canvas = document.getElementById("ocrCanvas");
       canvas.width = rw;
@@ -983,6 +983,10 @@
         sy = Math.round(srcCanvas.height * 0.15);
         sw = Math.round(srcCanvas.width * 0.92);
         sh = Math.round(srcCanvas.height * 0.70);
+      } else if (cropMode === "topBand") {
+        sx = 0; sy = 0; sw = srcCanvas.width; sh = Math.round(srcCanvas.height * 0.55);
+      } else if (cropMode === "midBand") {
+        sx = 0; sy = Math.round(srcCanvas.height * 0.22); sw = srcCanvas.width; sh = Math.round(srcCanvas.height * 0.50);
       } else if (cropMode === "bottom") {
         sx = Math.round(srcCanvas.width * 0.02);
         sy = Math.round(srcCanvas.height * 0.35);
@@ -1112,14 +1116,16 @@
 
         const dark = isDarkBackground(canvas);
         const passes = dark ? [
-          { label: "Inverted sticker (dark label)", c: makeContrastCanvas(canvas, "full", true) },
-          { label: "Inverted center band", c: makeContrastCanvas(canvas, "center", true) },
+          { label: "Inverted sticker", c: makeContrastCanvas(canvas, "full", true) },
+          { label: "Inverted top band", c: makeContrastCanvas(canvas, "topBand", true) },
+          { label: "Inverted middle band", c: makeContrastCanvas(canvas, "midBand", true) },
           { label: "Normal contrast", c: makeContrastCanvas(canvas, "full", false) },
           { label: "Rotated 90° (inverted)", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full", true) }
         ] : [
           { label: "Full sticker", c: makeContrastCanvas(canvas, "full", false) },
+          { label: "Top band", c: makeContrastCanvas(canvas, "topBand", false) },
+          { label: "Middle band", c: makeContrastCanvas(canvas, "midBand", false) },
           { label: "Inverted sticker", c: makeContrastCanvas(canvas, "full", true) },
-          { label: "Center crop", c: makeContrastCanvas(canvas, "center", false) },
           { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full", false) }
         ];
 
