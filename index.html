@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VINSpec Pro — Mechanic's VIN & Service Bay Assistant</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #0f172a;
+      color: #f1f5f9;
+    }
+    .font-mono-vin {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      letter-spacing: 0.08em;
+    }
+    @media print {
+      body { background: #ffffff !important; color: #0f172a !important; }
+      .no-print { display: none !important; }
+      .print-card { border: 1px solid #cbd5e1 !important; background: #ffffff !important; color: #0f172a !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- Top Header -->
+  <header class="no-print sticky top-0 z-30 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+    <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20">
+          <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-bold tracking-tight text-white sm:text-lg">VINSpec Pro</h1>
+          <p class="text-xs text-slate-400">Mechanic's VIN Scanner &amp; Service Bay Spec Sheet</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btnOpenCustomModal" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-amber-500/60 hover:bg-slate-700">
+          <svg class="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          <span>Add / Edit Spec</span>
+        </button>
+        <button id="btnPrintTicket" type="button" class="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">
+          <svg class="h-4 w-4 text-slate-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z"/></svg>
+          <span>Print Sheet</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl space-y-6 px-4 py-6">
+    <!-- Toast Container -->
+    <div id="toastContainer" class="no-print fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- VIN Capture & Lookup Panel -->
+    <section class="no-print rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-xl sm:p-6">
+      <div class="grid gap-6 lg:grid-cols-12">
+        <!-- Left: Camera / Photo OCR -->
+        <div class="space-y-3 lg:col-span-5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400">1. Capture VIN Photo</h2>
+            <span id="ocrStatusBadge" class="rounded-full bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-300">Ready</span>
+          </div>
+
+          <!-- Camera / Preview Viewport -->
+          <div class="relative aspect-video w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
+            <video id="cameraVideo" class="hidden h-full w-full object-cover" autoplay playsinline muted></video>
+            <img id="capturedPreview" class="hidden h-full w-full object-contain" alt="Captured VIN preview" />
+            <canvas id="ocrCanvas" class="hidden"></canvas>
+
+            <!-- Idle Placeholder -->
+            <div id="cameraPlaceholder" class="flex h-full flex-col items-center justify-center p-4 text-center">
+              <svg class="mb-2 h-10 w-10 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+              </svg>
+              <p class="text-xs font-medium text-slate-300">Point camera at door jamb sticker or windshield VIN</p>
+              <p class="mt-1 text-[11px] text-slate-500">Uses on-device OCR to read 17-character VINs</p>
+            </div>
+
+            <!-- VIN Alignment Guide Overlay (shown when camera active) -->
+            <div id="vinReticle" class="pointer-events-none absolute inset-0 hidden items-center justify-center">
+              <div class="w-4/5 rounded-lg border-2 border-dashed border-amber-400/90 bg-amber-400/5 px-3 py-4 text-center shadow-[0_0_0_9999px_rgba(2,6,23,0.45)]">
+                <span class="rounded bg-slate-950/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-300">Align 17-Digit VIN Here</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera Action Buttons -->
+          <div class="grid grid-cols-2 gap-2">
+            <button id="btnStartCamera" type="button" class="flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-amber-400">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+              <span>Open Camera</span>
+            </button>
+            <button id="btnSnapPhoto" type="button" class="hidden items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-emerald-400">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"/></svg>
+              <span>Snap &amp; Scan VIN</span>
+            </button>
+            <label class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">
+              <svg class="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+              <span>Take / Upload Photo</span>
+              <input id="fileVinInput" type="file" accept="image/*" capture="environment" class="hidden" />
+            </label>
+          </div>
+          <button id="btnStopCamera" type="button" class="hidden w-full rounded-lg border border-slate-700 bg-slate-800/70 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800">Close Camera</button>
+          <p id="ocrRawOutput" class="hidden rounded-lg bg-slate-950 px-3 py-2 text-[11px] text-slate-400"></p>
+        </div>
+
+        <!-- Right: Manual VIN Entry, Quick Bay Vehicles & History -->
+        <div class="flex flex-col justify-between space-y-4 lg:col-span-7">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400">2. Verify / Enter 17-Digit VIN</h2>
+              <span id="vinCharCount" class="font-mono-vin text-xs text-slate-400">0 / 17</span>
+            </div>
+
+            <form id="vinForm" class="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="vinInput"
+                type="text"
+                maxlength="17"
+                placeholder="e.g. 1FTFW1E84MFA00001"
+                autocomplete="off"
+                spellcheck="false"
+                class="font-mono-vin w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-base font-bold uppercase text-white placeholder-slate-600 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+              />
+              <button id="btnDecodeVin" type="submit" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-amber-400">
+                <span>Decode VIN</span>
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+              </button>
+            </form>
+            <p id="vinValidationMsg" class="text-xs text-slate-400">Tip: VINs never contain letters I, O, or Q. Live decoding uses NHTSA vPIC + Shop Spec DB.</p>
+          </div>
+
+          <!-- Quick Bay Presets -->
+          <div class="space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Quick-Load Common Shop Vehicles</p>
+            <div id="sampleVehicleButtons" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- Recent Bay History -->
+          <div class="space-y-2 border-t border-slate-800 pt-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Recent Bay History</p>
+              <button id="btnClearHistory" type="button" class="text-[11px] font-medium text-slate-500 hover:text-rose-400">Clear History</button>
+            </div>
+            <div id="recentHistoryList" class="flex flex-wrap gap-2 text-xs text-slate-500">
+              <span>No vehicles scanned yet.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vehicle Identity Banner -->
+    <section id="vehicleBanner" class="print-card rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/80 p-5 shadow-xl">
+      <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="badgeSource" class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400 border border-emerald-500/30">Verified Shop Spec</span>
+            <span id="badgeVin" class="font-mono-vin rounded bg-slate-950 px-2.5 py-0.5 text-xs font-semibold text-amber-400 border border-slate-700">1FTFW1E84MFA00001</span>
+          </div>
+          <h2 id="vehicleTitle" class="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">2021 Ford F-150</h2>
+          <p id="vehicleSubtitle" class="mt-0.5 text-sm text-slate-300">3.5L EcoBoost V6 &bull; 4WD &bull; Gasoline</p>
+        </div>
+
+        <div class="no-print flex flex-wrap items-center gap-2">
+          <button id="btnCopyBaySheet" type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-700">
+            <svg class="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"/></svg>
+            <span>Copy Bay Sheet</span>
+          </button>
+          <button id="btnEditCurrentSpec" type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
+            <span>Edit Vehicle Specs</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Alert if uncataloged VIN -->
+      <div id="uncatalogedAlert" class="mt-4 hidden rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+        <strong>Decoded via NHTSA vPIC!</strong> This exact Year/Make/Model isn't in your local shop spec database yet. Click <strong>Edit Vehicle Specs</strong> above to save its oil, filter, torque, and reset procedures to your shop library.
+      </div>
+    </section>
+
+    <!-- Primary 4-Card Service Spec Grid -->
+    <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <!-- Oil Type & Capacity -->
+      <div class="print-card rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Engine Oil &amp; Capacity</span>
+          <span class="rounded-lg bg-amber-500/15 p-1.5 text-amber-400">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/></svg>
+          </span>
+        </div>
+        <p id="specOilViscosity" class="mt-3 text-xl font-extrabold text-white">5W-30 Full Synthetic</p>
+        <p id="specOilCapacity" class="mt-1 text-sm font-semibold text-amber-400">6.0 qt (5.7 L) w/ filter</p>
+        <p id="specDrainTorque" class="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">Drain Plug: 19 lb-ft</p>
+      </div>
+
+      <!-- Carquest Oil Filter -->
+      <div class="print-card rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Carquest Oil Filter</span>
+          <span class="rounded-lg bg-sky-500/15 p-1.5 text-sky-400">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25"/></svg>
+          </span>
+        </div>
+        <p id="specFilterPremium" class="mt-3 text-xl font-extrabold text-white">CQ 84502</p>
+        <p id="specFilterRed" class="mt-1 text-sm font-semibold text-sky-400">Red: R84502</p>
+        <p id="specFilterNotes" class="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">Spin-on &bull; Lube gasket before install</p>
+      </div>
+
+      <!-- Wheel Lug Torque -->
+      <div class="print-card rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Wheel Lug Torque</span>
+          <span class="rounded-lg bg-rose-500/15 p-1.5 text-rose-400">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 0 1-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 0 1-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+          </span>
+        </div>
+        <p id="specLugTorque" class="mt-3 text-xl font-extrabold text-white">150 lb-ft</p>
+        <p id="specLugMetric" class="mt-1 text-sm font-semibold text-rose-400">203 N&middot;m &bull; 6-Lug</p>
+        <p id="specLugNote" class="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">M14 &times; 1.5 &bull; Star pattern</p>
+      </div>
+
+      <!-- Recommended Tire Pressure -->
+      <div class="print-card rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Cold Tire Pressure</span>
+          <span class="rounded-lg bg-emerald-500/15 p-1.5 text-emerald-400">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+          </span>
+        </div>
+        <p id="specTirePsi" class="mt-3 text-xl font-extrabold text-white">35 PSI Front / Rear</p>
+        <p id="specTireSpare" class="mt-1 text-sm font-semibold text-emerald-400">Spare: Check placard</p>
+        <p id="specTireNote" class="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">Always verify driver B-pillar placard</p>
+      </div>
+    </section>
+
+    <!-- Procedures + Bay Checklist Grid -->
+    <section class="grid gap-6 lg:grid-cols-12">
+      <!-- Left 8 cols: Tabbed Procedures (TPMS, Oil Reset, Fuel/Filter Reset) -->
+      <div class="print-card rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl lg:col-span-8">
+        <div class="no-print flex flex-wrap gap-2 border-b border-slate-800 pb-4">
+          <button data-tab="tpms" type="button" class="proc-tab rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition">TPMS Relearn</button>
+          <button data-tab="oil" type="button" class="proc-tab rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-700">Oil Life Reset</button>
+          <button data-tab="fuel" type="button" class="proc-tab rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-700">Fuel &amp; Filter Reset</button>
+        </div>
+
+        <div id="procedureContent" class="mt-4 space-y-4">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Right 4 cols: Interactive Bay Service Checklist -->
+      <div class="print-card rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl lg:col-span-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-amber-400">Bay Sign-Off Checklist</h3>
+          <span id="checklistProgressText" class="text-xs font-bold text-slate-300">0 / 7</span>
+        </div>
+        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+          <div id="checklistProgressBar" class="h-full w-0 rounded-full bg-emerald-500 transition-all duration-300"></div>
+        </div>
+
+        <div id="bayChecklist" class="mt-4 space-y-2.5">
+          <!-- Populated dynamically -->
+        </div>
+
+        <button id="btnResetChecklist" type="button" class="no-print mt-4 w-full rounded-xl border border-slate-700 bg-slate-800 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-700">
+          Reset Bay Checklist
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Custom Spec Modal -->
+  <div id="customSpecModal" class="no-print fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+    <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white">Add / Edit Vehicle Service Specs</h3>
+        <button id="btnCloseModal" type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="customSpecForm" class="mt-4 space-y-4 text-xs">
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Year *</label>
+            <input id="formYear" type="text" required placeholder="2022" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Make *</label>
+            <input id="formMake" type="text" required placeholder="Ford" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Model *</label>
+            <input id="formModel" type="text" required placeholder="F-150" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Engine</label>
+            <input id="formEngine" type="text" placeholder="3.5L EcoBoost V6" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Oil Viscosity &amp; Spec *</label>
+            <input id="formOilType" type="text" required placeholder="5W-30 Full Synthetic" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Oil Capacity *</label>
+            <input id="formOilCap" type="text" required placeholder="6.0 qt (5.7 L)" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Drain Plug Torque</label>
+            <input id="formDrainTorque" type="text" placeholder="19 lb-ft" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Carquest Oil Filter *</label>
+            <input id="formFilterNum" type="text" required placeholder="CQ 84502 / R84502" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Wheel Lug Torque *</label>
+            <input id="formLugTorque" type="text" required placeholder="150 lb-ft (203 N·m)" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="mb-1 block font-semibold text-slate-300">Recommended Tire Pressure *</label>
+            <input id="formTirePsi" type="text" required placeholder="35 PSI Front / Rear" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="mb-1 block font-semibold text-slate-300">TPMS Relearn Steps (one step per line)</label>
+          <textarea id="formTpmsSteps" rows="3" placeholder="Inflate all tires to placard PSI.&#10;Turn ignition ON (engine off)..." class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none"></textarea>
+        </div>
+
+        <div>
+          <label class="mb-1 block font-semibold text-slate-300">Oil Life Reset Steps (one step per line)</label>
+          <textarea id="formOilSteps" rows="3" placeholder="Turn ignition ON.&#10;Go to Settings -> Vehicle Maintenance..." class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none"></textarea>
+        </div>
+
+        <div>
+          <label class="mb-1 block font-semibold text-slate-300">Fuel / Other Filter Reset Steps (one step per line)</label>
+          <textarea id="formFuelSteps" rows="2" placeholder="In-tank module (no dash reset) OR EVIC -> Fuel Filter Life -> Hold OK..." class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white focus:border-amber-500 focus:outline-none"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t border-slate-800 pt-3">
+          <button id="btnCancelModal" type="button" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 font-semibold text-slate-300 hover:bg-slate-700">Cancel</button>
+          <button type="submit" class="rounded-xl bg-amber-500 px-5 py-2 font-bold text-slate-950 hover:bg-amber-400">Save to Shop Library</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Verified Built-in Shop Database
+    const BUILTIN_VEHICLES = [
+      {
+        key: "2021|FORD|F-150",
+        sampleVin: "1FTFW1E84MFA00001",
+        year: "2021",
+        make: "FORD",
+        model: "F-150",
+        engine: "3.5L EcoBoost V6",
+        drive: "4WD",
+        fuelType: "Gasoline",
+        oilViscosity: "5W-30 Full Synthetic",
+        oilCapacity: "6.0 qt (5.7 L) w/ filter",
+        drainTorque: "Drain Plug: 19 lb-ft",
+        filterPremium: "CQ 84502",
+        filterRed: "Red: R84502",
+        filterNotes: "Spin-on (Wix 57502 eq.) • Lube gasket",
+        lugTorque: "150 lb-ft",
+        lugMetric: "203 N·m • 6-Lug",
+        lugNote: "M14 × 1.5 • Star torque pattern",
+        tirePsi: "35 PSI Front / Rear",
+        tireSpare: "Spare: Check door placard",
+        tireNote: "Verify B-pillar placard for LT/Payload trims",
+        tpmsSteps: [
+          "Inflate all 4 tires to door-jamb placard PSI (verify spare if equipped).",
+          "Turn ignition ON (engine OFF) and press the hazard flashers button 3 times (or use TPMS trigger tool).",
+          "Horn will chirp once to confirm TPMS Train Mode.",
+          "Trigger/deflate Left Front (LF) tire until horn chirps, then repeat in order: Right Front (RF) → Right Rear (RR) → Left Rear (LR).",
+          "Double horn chirp confirms training complete; re-adjust pressures to placard PSI."
+        ],
+        oilResetSteps: [
+          "Turn ignition ON (engine OFF or running).",
+          "Use steering wheel controls to open Menu → Settings → Vehicle Maintenance.",
+          "Select Oil Life and press & hold OK until progress bar completes and reads 100%.",
+          "Alternative pedal method (keyed/older cluster): Ignition ON, press Gas + Brake pedals fully for ~25 seconds until reset completes."
+        ],
+        fuelResetSteps: [
+          "Gasoline 3.5L EcoBoost uses an in-tank lifetime fuel filter module — no scheduled spin-on fuel filter or dash fuel filter life reset.",
+          "Inspect engine air filter and cabin air filter during service; no cluster timer reset required."
+        ]
+      },
+      {
+        key: "2020|HONDA|CR-V",
+        sampleVin: "2HKRW2H50LH000001",
+        year: "2020",
+        make: "HONDA",
+        model: "CR-V",
+        engine: "1.5L Turbocharged L4",
+        drive: "AWD",
+        fuelType: "Gasoline",
+        oilViscosity: "0W-20 Full Synthetic",
+        oilCapacity: "3.7 qt (3.5 L) w/ filter",
+        drainTorque: "Drain Plug: 30 lb-ft (new crush washer)",
+        filterPremium: "CQ 84356",
+        filterRed: "Red: R84356",
+        filterNotes: "Spin-on (P84356 Ext. Perf.) • Lube gasket",
+        lugTorque: "80 lb-ft",
+        lugMetric: "108 N·m • 5-Lug",
+        lugNote: "M12 × 1.5 • 5-point star pattern",
+        tirePsi: "33 PSI Front / Rear",
+        tireSpare: "Compact Spare: 60 PSI",
+        tireNote: "Check B-pillar sticker for 17\" vs 18\" wheel trim",
+        tpmsSteps: [
+          "Indirect ABS-based TPMS: set all 4 tires to cold placard PSI first.",
+          "Turn ignition ON (engine OFF).",
+          "Touchscreen models: Press Home → Settings → Vehicle → TPMS Calibration → Calibrate.",
+          "Non-touchscreen models: Press & hold physical TPMS button lower-left of steering column until TPMS light blinks twice.",
+          "Drive vehicle 10–20 minutes at steady city/highway speeds to complete wheel-speed calibration."
+        ],
+        oilResetSteps: [
+          "Turn ignition to ON (engine OFF).",
+          "Use steering wheel controls to navigate to Settings → Maintenance Info and press ENTER.",
+          "Highlight Oil Life (or All Due Items) and press & hold ENTER for ~10 seconds.",
+          "Select Reset when prompted and confirm Oil Life returns to 100%."
+        ],
+        fuelResetSteps: [
+          "In-tank non-serviceable fuel strainer — no scheduled fuel filter replacement or dash fuel life reset.",
+          "Verify Maintenance Minder sub-codes (e.g., Code 2 for engine/cabin air filters) and reset via Maintenance Info."
+        ]
+      },
+      {
+        key: "2021|TOYOTA|RAV4",
+        sampleVin: "2T3P1RFV0MW000001",
+        year: "2021",
+        make: "TOYOTA",
+        model: "RAV4",
+        engine: "2.5L A25A-FKS / Hybrid L4",
+        drive: "AWD",
+        fuelType: "Gasoline / Hybrid",
+        oilViscosity: "0W-16 Full Synthetic",
+        oilCapacity: "4.8 qt (4.5 L) w/ filter",
+        drainTorque: "Drain Plug: 30 lb-ft (replace gasket)",
+        filterPremium: "CQ 84145",
+        filterRed: "Red: R84145",
+        filterNotes: "Spin-on • Replace drain washer every change",
+        lugTorque: "76 lb-ft",
+        lugMetric: "103 N·m • 5-Lug",
+        lugNote: "M12 × 1.5 • 5-point star pattern",
+        tirePsi: "35 PSI Front / Rear",
+        tireSpare: "Compact Spare: 60 PSI",
+        tireNote: "0W-20 allowed only in emergency; swap to 0W-16 next change",
+        tpmsSteps: [
+          "Inflate all tires to placard PSI (typically 35 PSI).",
+          "Turn ignition ON (engine OFF) and use steering wheel arrows to select the Gear (Settings) icon.",
+          "Scroll to Vehicle Settings → press & hold OK → select TPWS.",
+          "Highlight Set Pressure and press & hold OK until the TPMS warning light blinks 3 times.",
+          "Drive above 19 mph (30 km/h) to finish sensor initialization."
+        ],
+        oilResetSteps: [
+          "Turn ignition ON (engine OFF).",
+          "In the gauge cluster, navigate to Gear (Settings) → Vehicle Settings.",
+          "Select Scheduled Maintenance (and Oil Maintenance if listed).",
+          "Select Reset Data → Yes to clear the maintenance reminder."
+        ],
+        fuelResetSteps: [
+          "In-tank fuel pump/filter assembly — no scheduled external fuel filter or dash fuel filter reset.",
+          "For Hybrid models: inspect HV battery cooling intake filter under rear seat during routine service."
+        ]
+      },
+      {
+        key: "2020|CHEVROLET|SILVERADO 1500",
+        sampleVin: "1GCUYDED0LZ000001",
+        year: "2020",
+        make: "CHEVROLET",
+        model: "SILVERADO 1500",
+        engine: "5.3L EcoTec3 V8",
+        drive: "4WD",
+        fuelType: "Gasoline",
+        oilViscosity: "0W-20 Full Synthetic (dexos1 Gen 3)",
+        oilCapacity: "8.0 qt (7.6 L) w/ filter",
+        drainTorque: "Drain Plug: 18 lb-ft",
+        filterPremium: "CQ 84060",
+        filterRed: "Red: R84060",
+        filterNotes: "Spin-on (PF63 eq.) • Verify dipstick level",
+        lugTorque: "140 lb-ft",
+        lugMetric: "190 N·m • 6-Lug",
+        lugNote: "M14 × 1.5 • 6-lug star pattern",
+        tirePsi: "35 PSI Front / Rear",
+        tireSpare: "Full-Size Spare: Match placard",
+        tireNote: "Verify door placard (LT / Max Trailering may be higher)",
+        tpmsSteps: [
+          "Set all 4 tires to cold placard PSI.",
+          "Turn ignition ON (engine OFF), navigate DIC to the Tire Pressure screen.",
+          "Press & hold the thumbwheel/Set-Reset until horn chirps twice and 'Tire Learning Active' displays.",
+          "Use EL-50448 TPMS tool (or bleed/add air) starting at LF (marker light lit) → RF → RR → LR until horn chirps at each corner.",
+          "Double horn chirp confirms relearn complete; turn ignition OFF."
+        ],
+        oilResetSteps: [
+          "Turn ignition ON (engine OFF).",
+          "Use steering wheel right arrow to open the Info ('i') page on the DIC.",
+          "Scroll down to Oil Life Remaining (if hidden, enable it under Settings → Info Pages).",
+          "Press & hold the thumbwheel/check mark, then select Yes to reset Oil Life to 100%."
+        ],
+        fuelResetSteps: [
+          "Gasoline 5.3L V8 uses an in-tank fuel module — no scheduled fuel filter life reset.",
+          "Check Engine Air Filter life percentage in DIC Info Pages if equipped and reset if air filter was replaced."
+        ]
+      },
+      {
+        key: "2021|RAM|2500",
+        sampleVin: "3C6UR5DL0MG000001",
+        year: "2021",
+        make: "RAM",
+        model: "2500",
+        engine: "6.7L Cummins Turbo Diesel",
+        drive: "4WD",
+        fuelType: "Diesel",
+        oilViscosity: "10W-30 Heavy-Duty CK-4 (MS-10902)",
+        oilCapacity: "12.0 qt (11.4 L) w/ filter",
+        drainTorque: "Drain Plug: Verify pan spec & gasket",
+        filterPremium: "Wix 57620 / CQ 84620",
+        filterRed: "Fleetguard LF16035",
+        filterNotes: "Pre-fill/lube gasket • Wait 30 min to re-check dipstick",
+        lugTorque: "130 lb-ft",
+        lugMetric: "176 N·m • 8-Lug SRW",
+        lugNote: "SRW 8-lug star pattern (verify DRW manual if dually)",
+        tirePsi: "60–80 PSI (Check Placard)",
+        tireSpare: "Match rear placard PSI",
+        tireNote: "Heavy-duty trucks vary widely by SRW/DRW & Tire Load Range",
+        tpmsSteps: [
+          "Inflate all tires to exact front/rear cold PSI on driver door-jamb placard.",
+          "2021 Ram 2500 uses auto-learning direct TPMS sensors.",
+          "Drive above 15 mph (24 km/h) for 10–20 minutes to update readings and clear warning light."
+        ],
+        oilResetSteps: [
+          "Turn ignition to RUN (engine OFF).",
+          "Use steering wheel arrows to open Vehicle Info → Oil Life.",
+          "Press & hold OK until Oil Life resets to 100%."
+        ],
+        fuelResetSteps: [
+          "Replace BOTH fuel filters: engine-mounted cartridge (28mm/29mm cap) and frame-mounted rear fuel/water separator.",
+          "Prime system: cycle ignition to RUN (engine OFF) 3 times for ~10–15 sec each to purge air before starting.",
+          "In EVIC: navigate to Vehicle Info → Fuel Filter Life → press & hold OK to reset to 100%."
+        ]
+      }
+    ];
+
+    const BAY_CHECKLIST_ITEMS = [
+      "Oil drained & drain plug torqued to spec",
+      "Carquest oil filter gasket lubed & installed",
+      "Correct oil viscosity & capacity filled + dipstick checked",
+      "Wheel lugs hand-torqued in star pattern",
+      "All tire pressures set to door-jamb placard PSI",
+      "TPMS relearn / calibration completed",
+      "Oil life (and fuel filter life if diesel) reset to 100%"
+    ];
+
+    // State
+    let activeVehicle = BUILTIN_VEHICLES[0];
+    let activeTab = "tpms";
+    let checklistState = {};
+    let cameraStream = null;
+    let customSpecs = [];
+    let recentHistory = [];
+
+    // Safe localStorage helpers
+    function loadStorage(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+    function saveStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (e) {
+        // Ignore storage errors in restricted environments
+      }
+    }
+
+    // Toast notification (replaces alert/confirm)
+    function showToast(msg, type = "info") {
+      const container = document.getElementById("toastContainer");
+      const el = document.createElement("div");
+      const colors = {
+        info: "border-slate-700 bg-slate-900 text-slate-100",
+        success: "border-emerald-500/50 bg-emerald-950/90 text-emerald-200",
+        warn: "border-amber-500/50 bg-amber-950/90 text-amber-200",
+        error: "border-rose-500/50 bg-rose-950/90 text-rose-200"
+      };
+      el.className = `rounded-xl border px-4 py-2.5 text-xs font-semibold shadow-2xl transition-opacity duration-300 ${colors[type] || colors.info}`;
+      el.textContent = msg;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = "0";
+        setTimeout(() => el.remove(), 300);
+      }, 3200);
+    }
+
+    // Initialize
+    function init() {
+      customSpecs = loadStorage("vinspec_custom_specs", []);
+      recentHistory = loadStorage("vinspec_history", []);
+      checklistState = loadStorage("vinspec_checklist", {});
+
+      renderSampleButtons();
+      renderRecentHistory();
+      renderVehicle(activeVehicle, activeVehicle.sampleVin, "Verified Shop Spec", false);
+      bindEvents();
+    }
+
+    function bindEvents() {
+      const vinInput = document.getElementById("vinInput");
+      vinInput.addEventListener("input", () => {
+        vinInput.value = vinInput.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+        document.getElementById("vinCharCount").textContent = `${vinInput.value.length} / 17`;
+      });
+
+      document.getElementById("vinForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const vin = vinInput.value.trim().toUpperCase();
+        if (vin.length !== 17) {
+          showToast("Enter a full 17-character VIN (no I, O, or Q).", "warn");
+          return;
+        }
+        decodeVin(vin);
+      });
+
+      document.getElementById("btnStartCamera").addEventListener("click", startCamera);
+      document.getElementById("btnStopCamera").addEventListener("click", stopCamera);
+      document.getElementById("btnSnapPhoto").addEventListener("click", snapAndScan);
+      document.getElementById("fileVinInput").addEventListener("change", handleFileUpload);
+
+      document.querySelectorAll(".proc-tab").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          activeTab = btn.dataset.tab;
+          renderProcedureTabs();
+        });
+      });
+
+      document.getElementById("btnResetChecklist").addEventListener("click", () => {
+        checklistState[activeVehicle.key] = {};
+        saveStorage("vinspec_checklist", checklistState);
+        renderChecklist();
+        showToast("Bay checklist reset for this vehicle.", "info");
+      });
+
+      document.getElementById("btnClearHistory").addEventListener("click", () => {
+        recentHistory = [];
+        saveStorage("vinspec_history", recentHistory);
+        renderRecentHistory();
+        showToast("Recent bay history cleared.", "info");
+      });
+
+      document.getElementById("btnCopyBaySheet").addEventListener("click", copyBaySheet);
+      document.getElementById("btnPrintTicket").addEventListener("click", () => window.print());
+
+      document.getElementById("btnOpenCustomModal").addEventListener("click", () => openSpecModal(null));
+      document.getElementById("btnEditCurrentSpec").addEventListener("click", () => openSpecModal(activeVehicle));
+      document.getElementById("btnCloseModal").addEventListener("click", closeSpecModal);
+      document.getElementById("btnCancelModal").addEventListener("click", closeSpecModal);
+      document.getElementById("customSpecForm").addEventListener("submit", saveCustomSpec);
+    }
+
+    function renderSampleButtons() {
+      const container = document.getElementById("sampleVehicleButtons");
+      container.innerHTML = "";
+      BUILTIN_VEHICLES.forEach((v) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-amber-500/60 hover:bg-slate-800";
+        btn.textContent = `${v.year} ${v.make} ${v.model}`;
+        btn.addEventListener("click", () => {
+          document.getElementById("vinInput").value = v.sampleVin;
+          document.getElementById("vinCharCount").textContent = "17 / 17";
+          renderVehicle(v, v.sampleVin, "Verified Shop Spec", false);
+          pushHistory(v.sampleVin, `${v.year} ${v.make} ${v.model}`);
+          showToast(`Loaded ${v.year} ${v.make} ${v.model}`, "success");
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function pushHistory(vin, label) {
+      recentHistory = recentHistory.filter((item) => item.vin !== vin);
+      recentHistory.unshift({ vin, label, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      if (recentHistory.length > 8) recentHistory.pop();
+      saveStorage("vinspec_history", recentHistory);
+      renderRecentHistory();
+    }
+
+    function renderRecentHistory() {
+      const container = document.getElementById("recentHistoryList");
+      if (!recentHistory.length) {
+        container.innerHTML = '<span class="text-slate-500">No vehicles scanned yet.</span>';
+        return;
+      }
+      container.innerHTML = "";
+      recentHistory.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:border-amber-500/50 hover:text-white";
+        btn.innerHTML = `<span class="font-semibold text-amber-400">${item.label}</span><span class="font-mono-vin text-slate-500">${item.vin.slice(-6)}</span>`;
+        btn.addEventListener("click", () => {
+          document.getElementById("vinInput").value = item.vin;
+          document.getElementById("vinCharCount").textContent = "17 / 17";
+          decodeVin(item.vin);
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    // Live Camera & Tesseract.js OCR
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast("Live camera not available here — use 'Take / Upload Photo' instead.", "warn");
+        return;
+      }
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        const video = document.getElementById("cameraVideo");
+        video.srcObject = cameraStream;
+        video.classList.remove("hidden");
+        document.getElementById("cameraPlaceholder").classList.add("hidden");
+        document.getElementById("capturedPreview").classList.add("hidden");
+        document.getElementById("vinReticle").classList.remove("hidden");
+        document.getElementById("vinReticle").classList.add("flex");
+        document.getElementById("btnStartCamera").classList.add("hidden");
+        document.getElementById("btnSnapPhoto").classList.remove("hidden");
+        document.getElementById("btnSnapPhoto").classList.add("flex");
+        document.getElementById("btnStopCamera").classList.remove("hidden");
+        updateOcrBadge("Camera Live", "bg-emerald-500/20 text-emerald-300");
+      } catch (err) {
+        showToast("Camera permission denied or unavailable. Use 'Take / Upload Photo'.", "warn");
+      }
+    }
+
+    function stopCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        cameraStream = null;
+      }
+      document.getElementById("cameraVideo").classList.add("hidden");
+      document.getElementById("vinReticle").classList.add("hidden");
+      document.getElementById("vinReticle").classList.remove("flex");
+      document.getElementById("btnStartCamera").classList.remove("hidden");
+      document.getElementById("btnSnapPhoto").classList.add("hidden");
+      document.getElementById("btnSnapPhoto").classList.remove("flex");
+      document.getElementById("btnStopCamera").classList.add("hidden");
+      if (document.getElementById("capturedPreview").classList.contains("hidden")) {
+        document.getElementById("cameraPlaceholder").classList.remove("hidden");
+      }
+      updateOcrBadge("Ready", "bg-slate-800 text-slate-300");
+    }
+
+    function snapAndScan() {
+      const video = document.getElementById("cameraVideo");
+      const canvas = document.getElementById("ocrCanvas");
+      if (!video.videoWidth) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const preview = document.getElementById("capturedPreview");
+      preview.src = canvas.toDataURL("image/png");
+      preview.classList.remove("hidden");
+      stopCamera();
+      runVinOcr(canvas);
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      stopCamera();
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.getElementById("ocrCanvas");
+          const maxW = 1400;
+          const scale = img.width > maxW ? maxW / img.width : 1;
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          const preview = document.getElementById("capturedPreview");
+          preview.src = ev.target.result;
+          preview.classList.remove("hidden");
+          document.getElementById("cameraPlaceholder").classList.add("hidden");
+          runVinOcr(canvas);
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function preprocessCanvasForOcr(canvas) {
+      const ctx = canvas.getContext("2d");
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        // Simple high-contrast stretch
+        const boosted = gray < 120 ? Math.max(0, gray * 0.7) : Math.min(255, gray * 1.25);
+        d[i] = d[i + 1] = d[i + 2] = boosted;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      return canvas;
+    }
+
+    async function runVinOcr(canvas) {
+      if (typeof Tesseract === "undefined") {
+        showToast("OCR library still loading or offline — enter VIN manually.", "warn");
+        return;
+      }
+      updateOcrBadge("Scanning VIN...", "bg-amber-500/20 text-amber-300");
+      const rawEl = document.getElementById("ocrRawOutput");
+      rawEl.classList.remove("hidden");
+      rawEl.textContent = "Reading text from VIN photo...";
+
+      try {
+        preprocessCanvasForOcr(canvas);
+        const worker = await Tesseract.createWorker("eng");
+        await worker.setParameters({
+          tessedit_char_whitelist: "0123456789ABCDEFGHJKLMNPRSTUVWXYZ"
+        });
+        const { data: { text } } = await worker.recognize(canvas);
+        await worker.terminate();
+
+        const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const match = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/);
+        if (match) {
+          const foundVin = match[0];
+          document.getElementById("vinInput").value = foundVin;
+          document.getElementById("vinCharCount").textContent = "17 / 17";
+          rawEl.textContent = `Detected VIN: ${foundVin}`;
+          updateOcrBadge("VIN Found", "bg-emerald-500/20 text-emerald-300");
+          showToast(`OCR detected VIN: ${foundVin}`, "success");
+          decodeVin(foundVin);
+        } else {
+          rawEl.textContent = `OCR saw: "${cleaned.slice(0, 42) || 'no clear text'}" — try closer framing or enter manually.`;
+          updateOcrBadge("No 17-char VIN", "bg-rose-500/20 text-rose-300");
+          showToast("Couldn't isolate a 17-digit VIN. Try a closer, glare-free photo.", "warn");
+        }
+      } catch (err) {
+        rawEl.textContent = "OCR failed in browser — enter VIN manually.";
+        updateOcrBadge("OCR Error", "bg-rose-500/20 text-rose-300");
+      }
+    }
+
+    function updateOcrBadge(label, classes) {
+      const badge = document.getElementById("ocrStatusBadge");
+      badge.textContent = label;
+      badge.className = `rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${classes}`;
+    }
+
+    // NHTSA vPIC VIN Decoder + Shop Spec Matching
+    async function decodeVin(vin) {
+      const btn = document.getElementById("btnDecodeVin");
+      btn.disabled = true;
+      btn.querySelector("span").textContent = "Decoding...";
+
+      // Check if it's one of our exact sample VINs first
+      const sampleMatch = BUILTIN_VEHICLES.find((v) => v.sampleVin === vin);
+      if (sampleMatch) {
+        renderVehicle(sampleMatch, vin, "Verified Shop Spec", false);
+        pushHistory(vin, `${sampleMatch.year} ${sampleMatch.make} ${sampleMatch.model}`);
+        btn.disabled = false;
+        btn.querySelector("span").textContent = "Decode VIN";
+        return;
+      }
+
+      try {
+        const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
+        if (!res.ok) throw new Error("NHTSA API error");
+        const json = await res.json();
+        const r = json && json.Results && json.Results[0];
+        if (!r || (!r.Make && !r.ModelYear)) {
+          throw new Error("VIN not found in NHTSA database");
+        }
+
+        const year = (r.ModelYear || "").trim();
+        const make = (r.Make || "").trim().toUpperCase();
+        const model = (r.Model || "").trim().toUpperCase();
+        const engine = [r.DisplacementL ? `${Number(r.DisplacementL).toFixed(1)}L` : "", r.EngineCylinders ? `${r.EngineCylinders}-cyl` : "", r.FuelTypePrimary || ""].filter(Boolean).join(" ");
+        const drive = r.DriveType || "Standard Drive";
+        const key = `${year}|${make}|${model}`;
+
+        // Look up in custom specs first, then built-in specs
+        const matched = customSpecs.find((v) => v.key === key) ||
+          BUILTIN_VEHICLES.find((v) => v.key === key) ||
+          BUILTIN_VEHICLES.find((v) => v.make === make && model.includes(v.model));
+
+        if (matched) {
+          const merged = { ...matched, year: year || matched.year, engine: engine || matched.engine, drive: drive || matched.drive };
+          renderVehicle(merged, vin, "NHTSA + Shop Spec", false);
+          pushHistory(vin, `${merged.year} ${merged.make} ${merged.model}`);
+          showToast(`Decoded ${merged.year} ${merged.make} ${merged.model}`, "success");
+        } else {
+          const uncataloged = {
+            key,
+            year: year || "Unknown Year",
+            make: make || "Unknown Make",
+            model: model || "Unknown Model",
+            engine: engine || "Verify Engine Code",
+            drive,
+            fuelType: r.FuelTypePrimary || "Gasoline",
+            oilViscosity: "Check Oil Cap / Shop Manual",
+            oilCapacity: "Verify dipstick / OEM chart",
+            drainTorque: "Drain Plug: Verify OEM torque",
+            filterPremium: "Look up in Carquest Catalog",
+            filterRed: "Verify thread & gasket",
+            filterNotes: "Not yet saved in local shop library",
+            lugTorque: "Verify OEM Lug Spec",
+            lugMetric: "Check stud size",
+            lugNote: "Always use calibrated torque wrench",
+            tirePsi: "See Driver B-Pillar Placard",
+            tireSpare: "Check spare sidewall / placard",
+            tireNote: "Set cold tire pressures before TPMS reset",
+            tpmsSteps: [
+              "Inflate all tires to the cold PSI listed on the driver door-jamb placard.",
+              "Check if vehicle uses direct TPMS sensors (requires scan/trigger tool or cluster relearn) or indirect ABS calibration."
+            ],
+            oilResetSteps: [
+              "Turn ignition ON (engine OFF) and check instrument cluster Settings / Vehicle Maintenance menu for Oil Life Reset."
+            ],
+            fuelResetSteps: [
+              "Verify whether this engine has a serviceable inline/cartridge fuel filter or a diesel water separator reset."
+            ]
+          };
+          renderVehicle(uncataloged, vin, "NHTSA Decoded (Add Specs)", true);
+          pushHistory(vin, `${uncataloged.year} ${uncataloged.make} ${uncataloged.model}`);
+          showToast("VIN decoded! Add service specs to save for future bays.", "info");
+        }
+      } catch (err) {
+        showToast("Could not reach NHTSA VIN API. Check connection or use Quick-Load vehicles.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.querySelector("span").textContent = "Decode VIN";
+      }
+    }
+
+    function renderVehicle(v, vin, badgeText, isUncataloged) {
+      activeVehicle = v;
+      document.getElementById("badgeSource").textContent = badgeText;
+      document.getElementById("badgeVin").textContent = vin;
+      document.getElementById("vehicleTitle").textContent = `${v.year} ${v.make} ${v.model}`;
+      document.getElementById("vehicleSubtitle").textContent = `${v.engine} • ${v.drive} • ${v.fuelType}`;
+      document.getElementById("uncatalogedAlert").classList.toggle("hidden", !isUncataloged);
+
+      document.getElementById("specOilViscosity").textContent = v.oilViscosity;
+      document.getElementById("specOilCapacity").textContent = v.oilCapacity;
+      document.getElementById("specDrainTorque").textContent = v.drainTorque;
+
+      document.getElementById("specFilterPremium").textContent = v.filterPremium;
+      document.getElementById("specFilterRed").textContent = v.filterRed;
+      document.getElementById("specFilterNotes").textContent = v.filterNotes;
+
+      document.getElementById("specLugTorque").textContent = v.lugTorque;
+      document.getElementById("specLugMetric").textContent = v.lugMetric;
+      document.getElementById("specLugNote").textContent = v.lugNote;
+
+      document.getElementById("specTirePsi").textContent = v.tirePsi;
+      document.getElementById("specTireSpare").textContent = v.tireSpare;
+      document.getElementById("specTireNote").textContent = v.tireNote;
+
+      renderProcedureTabs();
+      renderChecklist();
+    }
+
+    function renderProcedureTabs() {
+      document.querySelectorAll(".proc-tab").forEach((btn) => {
+        const isActive = btn.dataset.tab === activeTab;
+        btn.className = isActive
+          ? "proc-tab rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition"
+          : "proc-tab rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-700";
+      });
+
+      const titles = {
+        tpms: "TPMS Sensor Relearn / Calibration Procedure",
+        oil: "Oil Life Monitor Reset Procedure",
+        fuel: "Fuel Filter & Maintenance Filter Reset"
+      };
+      const stepsMap = {
+        tpms: activeVehicle.tpmsSteps || [],
+        oil: activeVehicle.oilResetSteps || [],
+        fuel: activeVehicle.fuelResetSteps || []
+      };
+
+      const steps = stepsMap[activeTab];
+      const container = document.getElementById("procedureContent");
+      container.innerHTML = `
+        <h3 class="text-base font-bold text-white">${titles[activeTab]}</h3>
+        <ol class="space-y-2.5">
+          ${steps.map((step, idx) => `
+            <li class="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-sm text-slate-200">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-bold text-amber-400">${idx + 1}</span>
+              <span class="leading-relaxed">${step}</span>
+            </li>
+          `).join("")}
+        </ol>
+      `;
+    }
+
+    function renderChecklist() {
+      const container = document.getElementById("bayChecklist");
+      const vState = checklistState[activeVehicle.key] || {};
+      container.innerHTML = "";
+      let done = 0;
+
+      BAY_CHECKLIST_ITEMS.forEach((label, idx) => {
+        const checked = Boolean(vState[idx]);
+        if (checked) done++;
+        const row = document.createElement("label");
+        row.className = `flex cursor-pointer items-start gap-2.5 rounded-xl border p-2.5 text-xs transition ${
+          checked ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-800 bg-slate-950/60 text-slate-300 hover:border-slate-700"
+        }`;
+        row.innerHTML = `
+          <input type="checkbox" ${checked ? "checked" : ""} class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+          <span class="${checked ? "line-through opacity-80" : ""}">${label}</span>
+        `;
+        row.querySelector("input").addEventListener("change", (e) => {
+          if (!checklistState[activeVehicle.key]) checklistState[activeVehicle.key] = {};
+          checklistState[activeVehicle.key][idx] = e.target.checked;
+          saveStorage("vinspec_checklist", checklistState);
+          renderChecklist();
+        });
+        container.appendChild(row);
+      });
+
+      const pct = Math.round((done / BAY_CHECKLIST_ITEMS.length) * 100);
+      document.getElementById("checklistProgressText").textContent = `${done} / ${BAY_CHECKLIST_ITEMS.length}`;
+      document.getElementById("checklistProgressBar").style.width = `${pct}%`;
+    }
+
+    function copyBaySheet() {
+      const v = activeVehicle;
+      const text = [
+        `BAY SERVICE SHEET — ${v.year} ${v.make} ${v.model}`,
+        `VIN: ${document.getElementById("badgeVin").textContent} | Engine: ${v.engine}`,
+        `Oil: ${v.oilViscosity} | Capacity: ${v.oilCapacity} (${v.drainTorque})`,
+        `Carquest Filter: ${v.filterPremium} (${v.filterRed})`,
+        `Wheel Lug Torque: ${v.lugTorque} (${v.lugMetric})`,
+        `Tire Pressure: ${v.tirePsi} | ${v.tireSpare}`,
+        `TPMS: ${(v.tpmsSteps || []).join(" ")}`,
+        `Oil Reset: ${(v.oilResetSteps || []).join(" ")}`
+      ].join("\n");
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast("Bay spec sheet copied!", "success")).catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        showToast("Bay spec sheet copied!", "success");
+      } catch (e) {
+        showToast("Copy failed — use Print Sheet instead.", "warn");
+      }
+      ta.remove();
+    }
+
+    // Custom Spec Modal
+    function openSpecModal(vehicle) {
+      const modal = document.getElementById("customSpecModal");
+      document.getElementById("formYear").value = vehicle ? vehicle.year : "";
+      document.getElementById("formMake").value = vehicle ? vehicle.make : "";
+      document.getElementById("formModel").value = vehicle ? vehicle.model : "";
+      document.getElementById("formEngine").value = vehicle ? vehicle.engine : "";
+      document.getElementById("formOilType").value = vehicle && !vehicle.oilViscosity.includes("Check Oil Cap") ? vehicle.oilViscosity : "";
+      document.getElementById("formOilCap").value = vehicle && !vehicle.oilCapacity.includes("Verify dipstick") ? vehicle.oilCapacity : "";
+      document.getElementById("formDrainTorque").value = vehicle ? vehicle.drainTorque : "";
+      document.getElementById("formFilterNum").value = vehicle && !vehicle.filterPremium.includes("Look up") ? vehicle.filterPremium : "";
+      document.getElementById("formLugTorque").value = vehicle && !vehicle.lugTorque.includes("Verify OEM") ? vehicle.lugTorque : "";
+      document.getElementById("formTirePsi").value = vehicle && !vehicle.tirePsi.includes("See Driver") ? vehicle.tirePsi : "";
+      document.getElementById("formTpmsSteps").value = vehicle ? (vehicle.tpmsSteps || []).join("\n") : "";
+      document.getElementById("formOilSteps").value = vehicle ? (vehicle.oilResetSteps || []).join("\n") : "";
+      document.getElementById("formFuelSteps").value = vehicle ? (vehicle.fuelResetSteps || []).join("\n") : "";
+
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeSpecModal() {
+      const modal = document.getElementById("customSpecModal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function saveCustomSpec(e) {
+      e.preventDefault();
+      const year = document.getElementById("formYear").value.trim();
+      const make = document.getElementById("formMake").value.trim().toUpperCase();
+      const model = document.getElementById("formModel").value.trim().toUpperCase();
+      const key = `${year}|${make}|${model}`;
+
+      const newSpec = {
+        key,
+        sampleVin: document.getElementById("badgeVin").textContent || "CUSTOM",
+        year,
+        make,
+        model,
+        engine: document.getElementById("formEngine").value.trim() || "Standard Engine",
+        drive: activeVehicle.drive || "AWD/2WD",
+        fuelType: activeVehicle.fuelType || "Gasoline",
+        oilViscosity: document.getElementById("formOilType").value.trim(),
+        oilCapacity: document.getElementById("formOilCap").value.trim(),
+        drainTorque: document.getElementById("formDrainTorque").value.trim() || "Verify drain plug torque",
+        filterPremium: document.getElementById("formFilterNum").value.trim(),
+        filterRed: "Custom Shop Spec",
+        filterNotes: "Saved to Shop Library",
+        lugTorque: document.getElementById("formLugTorque").value.trim(),
+        lugMetric: "Star pattern torque",
+        lugNote: "Verify with calibrated torque wrench",
+        tirePsi: document.getElementById("formTirePsi").value.trim(),
+        tireSpare: "Check door-jamb placard",
+        tireNote: "Saved to Shop Library",
+        tpmsSteps: document.getElementById("formTpmsSteps").value.split("\n").map((s) => s.trim()).filter(Boolean),
+        oilResetSteps: document.getElementById("formOilSteps").value.split("\n").map((s) => s.trim()).filter(Boolean),
+        fuelResetSteps: document.getElementById("formFuelSteps").value.split("\n").map((s) => s.trim()).filter(Boolean)
+      };
+
+      customSpecs = customSpecs.filter((item) => item.key !== key);
+      customSpecs.unshift(newSpec);
+      saveStorage("vinspec_custom_specs", customSpecs);
+
+      renderVehicle(newSpec, newSpec.sampleVin, "Custom Shop Spec", false);
+      closeSpecModal();
+      showToast(`Saved ${year} ${make} ${model} to your shop library!`, "success");
+    }
+
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
