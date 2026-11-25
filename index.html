@@ -850,30 +850,57 @@
         .replace(/I/g, "1");
     }
 
+    const PLACARD_NOISE_WORDS = /(VEHICLE|CONFORM|TOYOTA|MOTOR|CORP|SAFETY|STANDARD|FEDERAL|PREVENTION|THEFT|GVWR|GAWR|PASSENGER|MPV|TRUCK|TIRE|PRESSURE|COLD|FRONT|REAR|SPARE|MANUFACTUR|DATE|BUMPER|APPLICABLE|EFFECT)/;
+
+    function isPlausibleVin(sub, rawChunk) {
+      if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(sub)) return false;
+      // Reject English placard phrases before O->0 / I->1 normalization
+      if (PLACARD_NOISE_WORDS.test(rawChunk.toUpperCase())) return false;
+      // Reject all-digits or all-letters
+      if (/^\d{17}$/.test(sub) || /^[A-Z]{17}$/.test(sub)) return false;
+      // Position 10 (index 9) model year is never 0, U, or Z
+      if (/[0UZ]/.test(sub[9])) return false;
+      // Last 6 characters (serial) must be mostly digits (at least 4 digits, and last 4 chars at least 3 digits)
+      const tail6Digits = (sub.slice(11).match(/\d/g) || []).length;
+      const tail4Digits = (sub.slice(13).match(/\d/g) || []).length;
+      if (tail6Digits < 4 || tail4Digits < 3) return false;
+      return true;
+    }
+
     function extractVinCandidates(rawText) {
       const candidates = new Map();
       const lines = rawText.split(/\r?\n/);
       lines.forEach((line) => {
-        const upperLine = line.toUpperCase();
+        const upperLine = line.toUpperCase().trim();
+        if (!upperLine) return;
         const hasVinLabel = /\bVIN\b|V\.I\.N|NO\.?\s*[:]/.test(upperLine);
-        // Check individual tokens and adjacent pairs on the same line
-        const tokens = upperLine.split(/[^A-Z0-9-]+/).filter(Boolean);
-        const searchPool = [...tokens, upperLine.replace(/[^A-Z0-9]/g, "")];
+        // Only inspect individual tokens (never mash space-separated English words together)
+        const tokens = upperLine.split(/\s+/).filter(Boolean);
+        // Also allow joining two adjacent tokens if one is short (e.g., OCR split a VIN in half)
+        const searchPool = [...tokens];
+        for (let t = 0; t < tokens.length - 1; t++) {
+          if (tokens[t].length + tokens[t + 1].length <= 20 && !PLACARD_NOISE_WORDS.test(tokens[t]) && !PLACARD_NOISE_WORDS.test(tokens[t + 1])) {
+            searchPool.push(tokens[t] + tokens[t + 1]);
+          }
+        }
+
         searchPool.forEach((chunk) => {
-          const norm = normalizeVinToken(chunk);
-          // Strip leading Code39 'I'/'1' prefix if 18 chars
+          const cleanRaw = chunk.replace(/[^A-Z0-9]/g, "");
+          if (cleanRaw.length < 17 || cleanRaw.length > 22) return;
+          const norm = normalizeVinToken(cleanRaw);
           const expanded = norm.length === 18 && norm.startsWith("1") ? [norm.slice(1), norm] : [norm];
           expanded.forEach((str) => {
             for (let i = 0; i <= str.length - 17; i++) {
               const sub = str.slice(i, i + 17);
-              if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(sub)) continue;
-              // Skip obvious non-VINs (all digits or no digits)
-              if (/^\d{17}$/.test(sub) || /^[A-Z]{17}$/.test(sub)) continue;
+              if (!isPlausibleVin(sub, cleanRaw)) continue;
               let score = 0;
-              if (isValidVinCheckDigit(sub)) score += 100;
-              if (hasVinLabel) score += 25;
+              const validCheck = isValidVinCheckDigit(sub);
+              if (validCheck) score += 120;
+              if (hasVinLabel) score += 30;
               if (/^[1-5JKSWYZ]/.test(sub)) score += 15;
-              if (sub.length === str.length) score += 10;
+              if (sub.length === str.length) score += 15;
+              // Bonus for pure digits in last 5 chars
+              if (/^\d{5}$/.test(sub.slice(12))) score += 20;
               const prev = candidates.get(sub) || -1;
               if (score > prev) candidates.set(sub, score);
             }
@@ -902,13 +929,21 @@
       return out;
     }
 
-    function makeContrastCanvas(srcCanvas, cropCenter = false) {
+    function makeContrastCanvas(srcCanvas, cropMode = "full") {
       const out = document.createElement("canvas");
-      const sx = cropCenter ? Math.round(srcCanvas.width * 0.05) : 0;
-      const sy = cropCenter ? Math.round(srcCanvas.height * 0.22) : 0;
-      const sw = cropCenter ? Math.round(srcCanvas.width * 0.90) : srcCanvas.width;
-      const sh = cropCenter ? Math.round(srcCanvas.height * 0.56) : srcCanvas.height;
-      const scale = cropCenter && sw < 1000 ? 1.8 : 1;
+      let sx = 0, sy = 0, sw = srcCanvas.width, sh = srcCanvas.height;
+      if (cropMode === "center") {
+        sx = Math.round(srcCanvas.width * 0.05);
+        sy = Math.round(srcCanvas.height * 0.22);
+        sw = Math.round(srcCanvas.width * 0.90);
+        sh = Math.round(srcCanvas.height * 0.56);
+      } else if (cropMode === "bottom") {
+        sx = Math.round(srcCanvas.width * 0.04);
+        sy = Math.round(srcCanvas.height * 0.45);
+        sw = Math.round(srcCanvas.width * 0.92);
+        sh = Math.round(srcCanvas.height * 0.50);
+      }
+      const scale = sw < 1400 ? Math.min(2.2, 1600 / sw) : 1;
       out.width = Math.round(sw * scale);
       out.height = Math.round(sh * scale);
       const ctx = out.getContext("2d");
@@ -917,7 +952,7 @@
       const d = imgData.data;
       for (let i = 0; i < d.length; i += 4) {
         const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        const boosted = gray < 125 ? Math.max(0, gray * 0.65) : Math.min(255, gray * 1.3);
+        const boosted = gray < 130 ? Math.max(0, gray * 0.6) : Math.min(255, gray * 1.35);
         d[i] = d[i + 1] = d[i + 2] = boosted;
       }
       ctx.putImageData(imgData, 0, 0);
@@ -925,8 +960,11 @@
     }
 
     async function tryBarcodeDecode(srcCanvas) {
-      const canvasesToTry = [srcCanvas, rotateCanvas(srcCanvas, 90)];
-      // 1. Native BarcodeDetector (fast on Android/Chrome)
+      const canvasesToTry = [
+        srcCanvas,
+        makeContrastCanvas(srcCanvas, "bottom"),
+        rotateCanvas(srcCanvas, 90)
+      ];
       if ("BarcodeDetector" in window) {
         try {
           const detector = new window.BarcodeDetector({ formats: ["code_39", "code_128", "data_matrix", "pdf417", "qr_code"] });
@@ -939,10 +977,13 @@
           }
         } catch (e) { /* fallback to ZXing */ }
       }
-      // 2. ZXing 1D/2D Barcode Reader
       if (typeof ZXing !== "undefined" && ZXing.BrowserMultiFormatReader) {
         try {
-          const reader = new ZXing.BrowserMultiFormatReader();
+          const hints = new Map();
+          if (ZXing.DecodeHintType && ZXing.DecodeHintType.TRY_HARDER) {
+            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          }
+          const reader = new ZXing.BrowserMultiFormatReader(hints);
           for (const c of canvasesToTry) {
             const img = new Image();
             img.src = c.toDataURL("image/png");
@@ -989,7 +1030,7 @@
       chipsEl.classList.add("hidden");
       rawEl.classList.remove("hidden");
 
-      // Stage 1: Try 1D/2D Barcode first (door-jamb stickers!)
+      // Stage 1: Try 1D/2D Barcode first
       updateOcrBadge("Checking Barcode...", "bg-amber-500/20 text-amber-300");
       rawEl.textContent = "Scanning door-jamb barcode...";
       const barcodeVin = await tryBarcodeDecode(canvas);
@@ -1019,14 +1060,15 @@
         worker = await Tesseract.createWorker("eng");
         await worker.setParameters({
           tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- ",
-          tessedit_pageseg_mode: "11"
+          tessedit_pageseg_mode: "6"
         });
 
         const passes = [
-          { label: "Full sticker", c: makeContrastCanvas(canvas, false) },
-          { label: "Center crop", c: makeContrastCanvas(canvas, true) },
-          { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), false) },
-          { label: "Rotated 270°", c: makeContrastCanvas(rotateCanvas(canvas, 270), false) }
+          { label: "Full sticker", c: makeContrastCanvas(canvas, "full") },
+          { label: "Bottom VIN band", c: makeContrastCanvas(canvas, "bottom") },
+          { label: "Center crop", c: makeContrastCanvas(canvas, "center") },
+          { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full") },
+          { label: "Rotated 270°", c: makeContrastCanvas(rotateCanvas(canvas, 270), "full") }
         ];
 
         let allCandidates = [];
@@ -1039,12 +1081,10 @@
           const found = extractVinCandidates(text);
           if (found.length) {
             allCandidates = allCandidates.concat(found);
-            // Stop early if we found a check-digit-verified VIN!
             if (found[0].validCheck) break;
           }
         }
 
-        // Deduplicate & sort best candidates
         const bestMap = new Map();
         allCandidates.forEach((c) => {
           if (!bestMap.has(c.vin) || c.score > bestMap.get(c.vin).score) {
@@ -1064,9 +1104,9 @@
           decodeVin(top.vin);
         } else {
           const previewText = lastRaw.replace(/\s+/g, " ").trim().slice(0, 60);
-          rawEl.textContent = `OCR saw: "${previewText || 'no clear text'}" — try closer framing on just the VIN line/barcode.`;
+          rawEl.textContent = `No valid VIN found (saw: "${previewText || 'unclear text'}"). Zoom closer to just the VIN & barcode.`;
           updateOcrBadge("No 17-char VIN", "bg-rose-500/20 text-rose-300");
-          showToast("Couldn't isolate a 17-digit VIN. Try zooming closer to the VIN & barcode.", "warn");
+          showToast("Couldn't isolate a valid 17-digit VIN. Zoom closer to the VIN line or barcode.", "warn");
         }
       } catch (err) {
         rawEl.textContent = "OCR failed in browser — enter VIN manually.";
