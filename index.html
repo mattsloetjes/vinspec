@@ -975,7 +975,7 @@
       return count > 0 && (sum / count) < 130;
     }
 
-    function makeContrastCanvas(srcCanvas, cropMode = "full", invert = false) {
+    function makeContrastCanvas(srcCanvas, cropMode = "full", invert = false, binarize = false) {
       const out = document.createElement("canvas");
       let sx = 0, sy = 0, sw = srcCanvas.width, sh = srcCanvas.height;
       if (cropMode === "center") {
@@ -984,28 +984,37 @@
         sw = Math.round(srcCanvas.width * 0.92);
         sh = Math.round(srcCanvas.height * 0.70);
       } else if (cropMode === "topBand") {
-        sx = 0; sy = 0; sw = srcCanvas.width; sh = Math.round(srcCanvas.height * 0.55);
+        sx = 0; sy = 0; sw = srcCanvas.width; sh = Math.round(srcCanvas.height * 0.42);
       } else if (cropMode === "midBand") {
-        sx = 0; sy = Math.round(srcCanvas.height * 0.22); sw = srcCanvas.width; sh = Math.round(srcCanvas.height * 0.50);
+        sx = 0; sy = Math.round(srcCanvas.height * 0.18); sw = srcCanvas.width; sh = Math.round(srcCanvas.height * 0.44);
       } else if (cropMode === "bottom") {
         sx = Math.round(srcCanvas.width * 0.02);
         sy = Math.round(srcCanvas.height * 0.35);
         sw = Math.round(srcCanvas.width * 0.96);
         sh = Math.round(srcCanvas.height * 0.55);
       }
-      const scale = sw < 1400 ? Math.min(2.4, 1600 / sw) : 1;
+      const scale = sw < 1000 ? Math.min(2.0, 1200 / sw) : (sw > 1400 ? 1200 / sw : 1);
       out.width = Math.round(sw * scale);
       out.height = Math.round(sh * scale);
       const ctx = out.getContext("2d");
       ctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
       const imgData = ctx.getImageData(0, 0, out.width, out.height);
       const d = imgData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        let gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        if (invert) gray = 255 - gray;
-        // Clean contrast stretch for black-on-white OCR & barcode readability
-        const boosted = gray < 135 ? Math.max(0, (gray - 30) * 0.7) : Math.min(255, gray * 1.25 + 20);
-        d[i] = d[i + 1] = d[i + 2] = boosted;
+      let sumG = 0;
+      const grays = new Float32Array(d.length / 4);
+      for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+        let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        if (invert) g = 255 - g;
+        grays[p] = g;
+        sumG += g;
+      }
+      const thresh = (sumG / grays.length) - 12;
+      for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+        const g = grays[p];
+        const val = binarize
+          ? (g < thresh ? 0 : 255)
+          : (g < 135 ? Math.max(0, (g - 30) * 0.7) : Math.min(255, g * 1.25 + 20));
+        d[i] = d[i + 1] = d[i + 2] = val;
       }
       ctx.putImageData(imgData, 0, 0);
       return out;
@@ -1014,7 +1023,7 @@
     async function tryBarcodeDecode(srcCanvas) {
       const dark = isDarkBackground(srcCanvas);
       const canvasesToTry = dark
-        ? [makeContrastCanvas(srcCanvas, "full", true), srcCanvas, makeContrastCanvas(srcCanvas, "bottom", true), rotateCanvas(makeContrastCanvas(srcCanvas, "full", true), 90)]
+        ? [makeContrastCanvas(srcCanvas, "full", true, true), makeContrastCanvas(srcCanvas, "full", true, false), srcCanvas, makeContrastCanvas(srcCanvas, "bottom", true, true), rotateCanvas(makeContrastCanvas(srcCanvas, "full", true, true), 90)]
         : [srcCanvas, makeContrastCanvas(srcCanvas, "full", false), makeContrastCanvas(srcCanvas, "full", true), rotateCanvas(srcCanvas, 90)];
       if ("BarcodeDetector" in window) {
         try {
@@ -1109,33 +1118,37 @@
       let worker = null;
       try {
         worker = await Tesseract.createWorker("eng");
-        await worker.setParameters({
-          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- ",
-          tessedit_pageseg_mode: "6"
-        });
+        try {
+          await worker.setParameters({
+            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- "
+          });
+        } catch (paramErr) { /* ignore parameter error */ }
 
         const dark = isDarkBackground(canvas);
         const passes = dark ? [
-          { label: "Inverted sticker", c: makeContrastCanvas(canvas, "full", true) },
-          { label: "Inverted top band", c: makeContrastCanvas(canvas, "topBand", true) },
-          { label: "Inverted middle band", c: makeContrastCanvas(canvas, "midBand", true) },
-          { label: "Normal contrast", c: makeContrastCanvas(canvas, "full", false) },
-          { label: "Rotated 90° (inverted)", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full", true) }
+          { label: "Inverted binary", c: makeContrastCanvas(canvas, "full", true, true) },
+          { label: "Inverted top band", c: makeContrastCanvas(canvas, "topBand", true, true) },
+          { label: "Inverted middle band", c: makeContrastCanvas(canvas, "midBand", true, false) },
+          { label: "Inverted sticker", c: makeContrastCanvas(canvas, "full", true, false) },
+          { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full", true, true) }
         ] : [
-          { label: "Full sticker", c: makeContrastCanvas(canvas, "full", false) },
-          { label: "Top band", c: makeContrastCanvas(canvas, "topBand", false) },
-          { label: "Middle band", c: makeContrastCanvas(canvas, "midBand", false) },
-          { label: "Inverted sticker", c: makeContrastCanvas(canvas, "full", true) },
-          { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full", false) }
+          { label: "Binary contrast", c: makeContrastCanvas(canvas, "full", false, true) },
+          { label: "Top band", c: makeContrastCanvas(canvas, "topBand", false, true) },
+          { label: "Middle band", c: makeContrastCanvas(canvas, "midBand", false, false) },
+          { label: "Inverted sticker", c: makeContrastCanvas(canvas, "full", true, true) },
+          { label: "Rotated 90°", c: makeContrastCanvas(rotateCanvas(canvas, 90), "full", false, true) }
         ];
 
         let allCandidates = [];
         let lastRaw = "";
 
-        for (const pass of passes) {
+        for (let idx = 0; idx < passes.length; idx++) {
+          const pass = passes[idx];
           rawEl.textContent = `OCR pass: ${pass.label}...`;
-          const { data: { text } } = await worker.recognize(pass.c);
-          lastRaw = text;
+          const { data: { text } } = await worker.recognize(pass.c.toDataURL("image/jpeg", 0.92));
+          if (idx === 0 || (idx < 3 && text.trim().length > lastRaw.trim().length)) {
+            lastRaw = text;
+          }
           const found = extractVinCandidates(text);
           if (found.length) {
             allCandidates = allCandidates.concat(found);
@@ -1167,7 +1180,7 @@
           showToast("Couldn't isolate a valid 17-digit VIN. Zoom closer to the VIN line or barcode.", "warn");
         }
       } catch (err) {
-        rawEl.textContent = "OCR failed in browser — enter VIN manually.";
+        rawEl.textContent = `OCR failed (${err && err.message ? err.message : "browser error"}) — enter VIN manually.`;
         updateOcrBadge("OCR Error", "bg-rose-500/20 text-rose-300");
       } finally {
         if (worker) await worker.terminate();
